@@ -105,21 +105,31 @@ class ImagePairsDataLoader:
 
         while True:
 
-            sample_indices = list(range(self.data_map.shortest_collection_length))
+            first_sample_indices = list(range(len(self.data_map.first_collection_paths)))
+            second_sample_indices = list(range(len(self.data_map.second_collection_paths)))
 
+            # Shuffle indices for both collections independently,
+            # since we don't intend to impose 1:1 mapping between specific samples.
             if self.shuffle:
-                random.shuffle(sample_indices)
+                random.shuffle(first_sample_indices)
+                random.shuffle(second_sample_indices)
 
-            for indices_batch in more_itertools.chunked(sample_indices, self.data_map.batch_size, strict=True):
+            # Truncate indices to the shortest collection length
+            first_sample_indices = first_sample_indices[:self.data_map.shortest_collection_length]
+            second_sample_indices = second_sample_indices[:self.data_map.shortest_collection_length]
+
+            for first_indices_batch, second_indices_batch in zip(
+                    more_itertools.chunked(first_sample_indices, self.data_map.batch_size, strict=True),
+                    more_itertools.chunked(second_sample_indices, self.data_map.batch_size, strict=True)):
 
                 first_collection_batch = []
                 second_collection_batch = []
 
-                for sample_index in indices_batch:
+                for first_sample_index, second_sample_index in zip(first_indices_batch, second_indices_batch):
 
                     first_collection_batch.append(
                         cv2.resize(
-                            cv2.imread(self.data_map.first_collection_paths[sample_index]),
+                            cv2.imread(self.data_map.first_collection_paths[first_sample_index]),
                             self.data_map.target_size[:2],
                             interpolation=cv2.INTER_CUBIC
                         )
@@ -127,7 +137,7 @@ class ImagePairsDataLoader:
 
                     second_collection_batch.append(
                         cv2.resize(
-                            cv2.imread(self.data_map.second_collection_paths[sample_index]),
+                            cv2.imread(self.data_map.second_collection_paths[second_sample_index]),
                             self.data_map.target_size[:2],
                             interpolation=cv2.INTER_CUBIC
                         )

@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: install dependencies
         run: |
-          pip install -r requirements.txt
+          apt update && apt install -y libcairo2-dev libgl1 && pip install -r requirements.txt
       - name: run unit tests
         run: invoke tests.unit-tests
       - name: run static code analysis

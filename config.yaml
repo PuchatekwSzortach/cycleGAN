@@ -1,0 +1,5 @@
+data_dir_on_host: "../../data/cycleGAN"
+data_dir: "/data"
+
+logging_output_directory_on_host: "/tmp/cycleGAN"
+logging_path: "/output/log.html"

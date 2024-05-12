@@ -3,3 +3,21 @@ data_dir: "/data"
 
 logging_output_directory_on_host: "/tmp/cycleGAN"
 logging_path: "/output/log.html"
+
+horse2zebra_dataset:
+  training_data:
+    first_collection_directory: "/data/horse2zebra/trainA"
+    second_collection_directory: "/data/horse2zebra/trainB"
+  validation_data:
+    first_collection_directory: "/data/horse2zebra/testA"
+    second_collection_directory: "/data/horse2zebra/testB"
+
+horse2zebra_model:
+
+  batch_size: 1
+  image_shape: [256, 256, 3]
+
+  data_augmentation_parameters:
+    image_shape: [256, 256, 3]
+    resized_image_shape: [286, 286]
+    use_up_down_flip: false

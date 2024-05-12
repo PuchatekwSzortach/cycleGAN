@@ -5,20 +5,21 @@ Module with utilities
 import logging
 import os
 
+import box
 import yaml
 
 
-def read_yaml(path: str):
+def read_yaml(path: str) -> box.Box:
     """Read content of yaml file from path
 
     :param path: path to yaml file
     :type path: str
-    :return: yaml file content, usually a dictionary
+    :return: yaml file content as python box
     """
 
     with open(path, encoding="utf-8") as file:
 
-        return yaml.safe_load(file)
+        return box.Box(yaml.safe_load(file))
 
 
 def get_logger(path: str) -> logging.Logger:

@@ -16,8 +16,10 @@ def horse2zebra_data(_context, config_path):
     """
 
     import tqdm
+    import vlogging
 
     import net.data
+    import net.processing
     import net.utilities
 
     config = net.utilities.read_yaml(config_path)
@@ -28,9 +30,10 @@ def horse2zebra_data(_context, config_path):
         batch_size=config.horse2zebra_model.batch_size,
         shuffle=True,
         target_size=config.horse2zebra_model.image_shape,
-        use_augmentations=True,
         augmentation_parameters=config.horse2zebra_model.data_augmentation_parameters
     )
+
+    logger = net.utilities.get_logger(config.logging_path)
 
     iterator = iter(data_loader)
 
@@ -38,4 +41,12 @@ def horse2zebra_data(_context, config_path):
 
         first_images, second_images = next(iterator)
 
-        print(first_images.shape, second_images.shape)
+        for first_image, second_image in zip(first_images, second_images):
+
+            logger.info(
+                vlogging.VisualRecord(
+                    "horse2zebra",
+                    list(net.processing.ImageProcessor.denormalize_batch([first_image, second_image]))
+                )
+
+            )

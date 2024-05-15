@@ -29,7 +29,7 @@ class ImagePairsDataLoader:
             batch_size: int,
             shuffle: bool,
             target_size: typing.Tuple[int, int],
-            use_augmentations: bool, augmentation_parameters: typing.Union[dict, None]):
+            augmentation_parameters: typing.Union[dict, None]):
         """
         Constructor
 
@@ -37,11 +37,11 @@ class ImagePairsDataLoader:
             first_collection_directory (str): path to directory with first collection of images
             second_collection_directory (str): path to directory with second collection of images
             batch_size (int): batch size
-            shuffle (bool): if True, images are shuffled randomly
+            shuffle (bool): if True, images are shuffled randomly. Both collections are shuffled independently,
+            so there is no guarantee that images from the same index in both collections will be paired together.
             target_size: typing.Tuple[int, int]: target height and width for images
-            use_augmentations (bool): if True, images augmentation is used when drawing samples
-            augmentation_parameters (typing.Union[dict, None]): augmentation parameters or None if use_augmentations
-            is False
+            augmentation_parameters (typing.Union[dict, None]): augmentation parameters or None if no augmentation
+            should be applied
         """
 
         self.data_map = box.Box({
@@ -58,10 +58,10 @@ class ImagePairsDataLoader:
 
         self.shuffle = shuffle
 
-        self.use_augmentations = use_augmentations
+        self.use_augmentations = augmentation_parameters is not None
 
         self.augmentation_pipeline = self._get_augmentation_pipeline(augmentation_parameters) \
-            if use_augmentations is True else None
+            if self.use_augmentations is True else None
 
     def _get_augmentation_pipeline(self, augmentation_parameters: dict) -> imgaug.augmenters.Sequential:
         """
@@ -93,10 +93,10 @@ class ImagePairsDataLoader:
 
     def __len__(self) -> int:
         """
-        Get number of images in dataset
+        Get number of samples dataloader can yield
 
         Returns:
-            int: number of images in dataset
+            int: number of samples dataloader can yield
         """
 
         return self.data_map.shortest_collection_length // self.data_map.batch_size
@@ -109,7 +109,7 @@ class ImagePairsDataLoader:
             second_sample_indices = list(range(len(self.data_map.second_collection_paths)))
 
             # Shuffle indices for both collections independently,
-            # since we don't intend to impose 1:1 mapping between specific samples.
+            # since we don't intend to impose 1:1 mapping between specific samples
             if self.shuffle:
                 random.shuffle(first_sample_indices)
                 random.shuffle(second_sample_indices)

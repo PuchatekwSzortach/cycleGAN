@@ -20,7 +20,8 @@
 				"seelog.python-init-generator" // python __init__ generator
 			],
 			"settings": {
-				"python.linting.pylintEnabled": true
+				"python.linting.pylintEnabled": true,
+				"extensions.verifySignature": false
 			}
 		}
 	}

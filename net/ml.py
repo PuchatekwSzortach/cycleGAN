@@ -151,6 +151,72 @@ class GeneratorBuilder():
         return tf.keras.Model(inputs=input_op, outputs=x)
 
 
+class DiscriminatorBuilder():
+    """
+    Class for building CycleGAN discriminators
+    """
+
+    def get_model(self):
+        """
+        Get discriminator model
+        """
+
+        input_op = tf.keras.layers.Input(
+            shape=(None, None, 3)
+        )
+
+        base_filters_count = 64
+
+        x = tf.keras.layers.Conv2D(
+            filters=base_filters_count,
+            kernel_size=4,
+            strides=2,
+            padding="same"
+        )(input_op)
+
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+
+        filters_multipliers = 1
+
+        layers_count = 3
+
+        for index in range(1, layers_count):
+
+            filters_multipliers = min(2 ** index, 8)
+
+            x = tf.keras.layers.Conv2D(
+                filters=base_filters_count * filters_multipliers,
+                kernel_size=4,
+                strides=2,
+                padding="same"
+            )(x)
+
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+
+        filters_multipliers = min(2 ** layers_count, 8)
+
+        x = tf.keras.layers.Conv2D(
+            filters=base_filters_count * filters_multipliers,
+            kernel_size=4,
+            strides=1,
+            padding="same"
+        )(x)
+
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+
+        # Use 1x1 kernel to get 1 channel output
+        x = tf.keras.layers.Conv2D(
+            filters=1,
+            kernel_size=4,
+            strides=1,
+            padding="same"
+        )(x)
+
+        return tf.keras.Model(inputs=input_op, outputs=x)
+
+
 class CycleGANModel(tf.keras.Model):
     """
     CycleGAN model
@@ -163,5 +229,8 @@ class CycleGANModel(tf.keras.Model):
 
         super().__init__()
 
-        self.left_collection_generator = GeneratorBuilder().get_model()
-        self.right_collection_generator = GeneratorBuilder().get_model()
+        self.collection_a_generator = GeneratorBuilder().get_model()
+        self.collection_b_generator = GeneratorBuilder().get_model()
+
+        self.collection_a_discriminator = DiscriminatorBuilder().get_model()
+        self.collection_b_discriminator = DiscriminatorBuilder().get_model()

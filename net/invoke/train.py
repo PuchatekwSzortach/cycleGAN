@@ -29,8 +29,6 @@ def train_horse2zebra_model(_context, config_path):
 
     icecream.ic(data.shape)
 
-    generated_right = cycle_gan.left_collection_generator.predict(data, verbose=0)
-    generated_left = cycle_gan.right_collection_generator.predict(generated_right, verbose=0)
+    output = cycle_gan.collection_a_discriminator.predict(data, verbose=0)
 
-    icecream.ic(generated_right.shape)
-    icecream.ic(generated_left.shape)
+    icecream.ic(output.shape)

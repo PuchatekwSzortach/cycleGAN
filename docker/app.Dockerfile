@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:experimental
 FROM tensorflow/tensorflow:2.16.1-gpu
 
-RUN apt update && apt install -y libgl1 libcairo2-dev vim
+RUN apt update && apt install -y libgl1 libcairo2-dev vim git
 
 # Install python environment
 COPY ./requirements.txt /tmp/requirements.txt

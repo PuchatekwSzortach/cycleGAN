@@ -4,6 +4,8 @@ Module with machine learning related logic
 
 import tensorflow as tf
 
+import net.data
+
 
 class ReflectionPadding2D(tf.keras.layers.Layer):
     """
@@ -234,3 +236,29 @@ class CycleGANModel(tf.keras.Model):
 
         self.collection_a_discriminator = DiscriminatorBuilder().get_model()
         self.collection_b_discriminator = DiscriminatorBuilder().get_model()
+
+        self.collection_a_image_pool = net.data.ImagePool(max_size=50)
+        self.collection_b_image_pool = net.data.ImagePool(max_size=50)
+
+    def _get_discriminator_loss_op(self):
+
+        base_loss_op = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+        def loss_op(source_images_op, target_images_op):
+
+            return 1
+
+        return loss_op
+
+    def train_step(self, data):
+        """
+        Manual train step
+        """
+
+        collection_a_real_images, collection_b_real_images = data
+
+        # Train discriminators
+        self.collection_a_discriminator.trainable = True
+        self.collection_b_discriminator.trainable = True
+        self.collection_a_generator.trainable = False
+        self.collection_b_generator.trainable = False

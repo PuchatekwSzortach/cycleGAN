@@ -2,7 +2,6 @@
 Module with machine learning related logic
 """
 
-import box
 import tensorflow as tf
 
 import net.data
@@ -232,12 +231,12 @@ class CycleGANModel(tf.keras.Model):
 
         super().__init__()
 
-        self.models_map = box.Box({
+        self.models_map = {
             "collection_a_generator": GeneratorBuilder().get_model(),
             "collection_b_generator": GeneratorBuilder().get_model(),
             "collection_a_discriminator": DiscriminatorBuilder().get_model(),
             "collection_b_discriminator": DiscriminatorBuilder().get_model()
-        })
+        }
 
         self.collection_a_image_pool = net.data.ImagePool(max_size=50)
         self.collection_b_image_pool = net.data.ImagePool(max_size=50)
@@ -250,9 +249,9 @@ class CycleGANModel(tf.keras.Model):
 
         base_loss_op = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
-        def loss_op(labels_op, images_op):
+        def loss_op(labels_op, predictions_op):
 
-            return base_loss_op(labels_op, images_op)
+            return base_loss_op(labels_op, predictions_op)
 
         return loss_op
 
@@ -282,11 +281,11 @@ class CycleGANModel(tf.keras.Model):
 
             discriminator_loss = \
                 self.discriminator_loss_op(
-                    tf.ones_like(discriminator_prediction_on_real_images),
-                    discriminator_prediction_on_real_images) + \
+                    labels_op=tf.ones_like(discriminator_prediction_on_real_images),
+                    predictions_op=discriminator_prediction_on_real_images) + \
                 self.discriminator_loss_op(
-                    tf.zeros_like(discriminator_predictions_on_generated_images),
-                    discriminator_predictions_on_generated_images)
+                    labels_op=tf.zeros_like(discriminator_predictions_on_generated_images),
+                    predictions_op=discriminator_predictions_on_generated_images)
 
         discriminator_gradients = discriminator_tape.gradient(
             discriminator_loss,

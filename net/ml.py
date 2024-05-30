@@ -2,6 +2,8 @@
 Module with machine learning related logic
 """
 
+import collections
+
 import tensorflow as tf
 
 import net.data
@@ -150,7 +152,9 @@ class GeneratorBuilder():
                 activation="tanh"
             )(x)
 
-        return tf.keras.Model(inputs=input_op, outputs=x)
+        model = tf.keras.Model(inputs=input_op, outputs=x)
+        model.compile()
+        return model
 
 
 class DiscriminatorBuilder():
@@ -216,7 +220,9 @@ class DiscriminatorBuilder():
             padding="same"
         )(x)
 
-        return tf.keras.Model(inputs=input_op, outputs=x)
+        model = tf.keras.Model(inputs=input_op, outputs=x)
+        model.compile()
+        return model
 
 
 class CycleGANModel(tf.keras.Model):
@@ -243,7 +249,10 @@ class CycleGANModel(tf.keras.Model):
 
         self.discriminator_loss_op = self._get_discriminator_loss_op()
 
-        self.discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
+        self.optimizers_map = {
+            "collection_a_discriminator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5),
+            "collection_b_discriminator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
+        }
 
     def _get_discriminator_loss_op(self):
 
@@ -255,9 +264,15 @@ class CycleGANModel(tf.keras.Model):
 
         return loss_op
 
-    def train_step(self, data):
+    def _train_discriminators(self, data: tuple) -> dict:
         """
-        Manual train step
+        Train discriminators
+
+        Args:
+            data (tuple): training data
+
+        Returns:
+            dict: map with losses for trained discriminators
         """
 
         collection_a_real_images, collection_b_real_images = data
@@ -268,32 +283,75 @@ class CycleGANModel(tf.keras.Model):
         self.models_map["collection_a_generator"].trainable = False
         self.models_map["collection_b_generator"].trainable = False
 
-        with tf.GradientTape() as discriminator_tape:
+        losses_map = {}
 
-            collection_b_generated_images = self.models_map["collection_b_generator"](
-                collection_a_real_images, training=False)
+        # Define a named tuple for the generator and discriminator data
+        TrainingInput = collections.namedtuple(
+            "TrainingInput",
+            ["generator", "discriminator", "source_images", "target_images", "optimizer", "loss_name"])
 
-            discriminator_prediction_on_real_images = self.models_map["collection_b_discriminator"](
-                collection_b_real_images, training=True)
+        # Training inputs for training both discriminators
+        training_inputs = [
+            TrainingInput(
+                generator=self.models_map["collection_a_generator"],
+                discriminator=self.models_map["collection_b_discriminator"],
+                source_images=collection_a_real_images,
+                target_images=collection_b_real_images,
+                optimizer=self.optimizers_map["collection_b_discriminator"],
+                loss_name="discriminator_b_loss"
+            ),
+            TrainingInput(
+                generator=self.models_map["collection_b_generator"],
+                discriminator=self.models_map["collection_a_discriminator"],
+                source_images=collection_b_real_images,
+                target_images=collection_a_real_images,
+                optimizer=self.optimizers_map["collection_a_discriminator"],
+                loss_name="discriminator_a_loss"
+            )
+        ]
 
-            discriminator_predictions_on_generated_images = self.models_map["collection_b_discriminator"](
-                collection_b_generated_images, training=True)
+        # Iterate over training inputs to train discriminators
+        for training_input in training_inputs:
 
-            discriminator_loss = \
-                self.discriminator_loss_op(
-                    labels_op=tf.ones_like(discriminator_prediction_on_real_images),
-                    predictions_op=discriminator_prediction_on_real_images) + \
-                self.discriminator_loss_op(
-                    labels_op=tf.zeros_like(discriminator_predictions_on_generated_images),
-                    predictions_op=discriminator_predictions_on_generated_images)
+            with tf.GradientTape() as discriminator_tape:
 
-        discriminator_gradients = discriminator_tape.gradient(
-            discriminator_loss,
-            self.models_map["collection_b_discriminator"].trainable_variables)
+                generated_images = training_input.generator(
+                    training_input.source_images, training=False)
 
-        self.discriminator_optimizer.apply_gradients(
-            zip(discriminator_gradients, self.models_map["collection_b_discriminator"].trainable_variables))
+                discriminator_prediction_on_real_images = training_input.discriminator(
+                    training_input.target_images, training=True)
 
-        return {
-            "discriminator_loss": discriminator_loss
+                discriminator_predictions_on_generated_images = training_input.discriminator(
+                    generated_images, training=True)
+
+                discriminator_loss = \
+                    self.discriminator_loss_op(
+                        labels_op=tf.ones_like(discriminator_prediction_on_real_images),
+                        predictions_op=discriminator_prediction_on_real_images) + \
+                    self.discriminator_loss_op(
+                        labels_op=tf.zeros_like(discriminator_predictions_on_generated_images),
+                        predictions_op=discriminator_predictions_on_generated_images)
+
+                losses_map[training_input.loss_name] = discriminator_loss
+
+            discriminator_gradients = discriminator_tape.gradient(
+                discriminator_loss,
+                training_input.discriminator.trainable_variables)
+
+            training_input.optimizer.apply_gradients(
+                zip(discriminator_gradients, training_input.discriminator.trainable_variables))
+
+        return losses_map
+
+    def train_step(self, data):
+        """
+        Manual train step
+        """
+
+        discriminator_losses_map = self._train_discriminators(data)
+
+        losses_map = {
+            **discriminator_losses_map
         }
+
+        return losses_map

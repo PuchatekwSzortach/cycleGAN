@@ -16,19 +16,29 @@ def train_horse2zebra_model(_context, config_path):
     """
 
     import icecream
-    import numpy as np
+    import tqdm
 
     import net.ml
     import net.utilities
 
-    # config = net.utilities.read_yaml(config_path)
+    config = net.utilities.read_yaml(config_path)
+
+    data_loader = net.data.ImagePairsDataLoader(
+        first_collection_directory=config.horse2zebra_dataset.training_data.first_collection_directory,
+        second_collection_directory=config.horse2zebra_dataset.training_data.second_collection_directory,
+        batch_size=config.horse2zebra_model.batch_size,
+        shuffle=True,
+        target_size=config.horse2zebra_model.image_shape,
+        augmentation_parameters=config.horse2zebra_model.data_augmentation_parameters
+    )
+
+    data_iterator = iter(data_loader)
 
     cycle_gan = net.ml.CycleGANModel()
 
-    data = np.ones((4, 256, 256, 3))
+    for _ in tqdm.tqdm(range(4)):
 
-    icecream.ic(data.shape)
+        sample = next(data_iterator)
+        losses_map = cycle_gan.train_step(sample)
 
-    output = cycle_gan.collection_a_discriminator.predict(data, verbose=0)
-
-    icecream.ic(output.shape)
+        icecream.ic(losses_map)

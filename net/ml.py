@@ -4,6 +4,8 @@ Module with machine learning related logic
 
 import tensorflow as tf
 
+import net.data
+
 
 class ReflectionPadding2D(tf.keras.layers.Layer):
     """
@@ -229,8 +231,69 @@ class CycleGANModel(tf.keras.Model):
 
         super().__init__()
 
-        self.collection_a_generator = GeneratorBuilder().get_model()
-        self.collection_b_generator = GeneratorBuilder().get_model()
+        self.models_map = {
+            "collection_a_generator": GeneratorBuilder().get_model(),
+            "collection_b_generator": GeneratorBuilder().get_model(),
+            "collection_a_discriminator": DiscriminatorBuilder().get_model(),
+            "collection_b_discriminator": DiscriminatorBuilder().get_model()
+        }
 
-        self.collection_a_discriminator = DiscriminatorBuilder().get_model()
-        self.collection_b_discriminator = DiscriminatorBuilder().get_model()
+        self.collection_a_image_pool = net.data.ImagePool(max_size=50)
+        self.collection_b_image_pool = net.data.ImagePool(max_size=50)
+
+        self.discriminator_loss_op = self._get_discriminator_loss_op()
+
+        self.discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
+
+    def _get_discriminator_loss_op(self):
+
+        base_loss_op = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+        def loss_op(labels_op, predictions_op):
+
+            return base_loss_op(labels_op, predictions_op)
+
+        return loss_op
+
+    def train_step(self, data):
+        """
+        Manual train step
+        """
+
+        collection_a_real_images, collection_b_real_images = data
+
+        # Train discriminators
+        self.models_map["collection_a_discriminator"].trainable = True
+        self.models_map["collection_b_discriminator"].trainable = True
+        self.models_map["collection_a_generator"].trainable = False
+        self.models_map["collection_b_generator"].trainable = False
+
+        with tf.GradientTape() as discriminator_tape:
+
+            collection_b_generated_images = self.models_map["collection_b_generator"](
+                collection_a_real_images, training=False)
+
+            discriminator_prediction_on_real_images = self.models_map["collection_b_discriminator"](
+                collection_b_real_images, training=True)
+
+            discriminator_predictions_on_generated_images = self.models_map["collection_b_discriminator"](
+                collection_b_generated_images, training=True)
+
+            discriminator_loss = \
+                self.discriminator_loss_op(
+                    labels_op=tf.ones_like(discriminator_prediction_on_real_images),
+                    predictions_op=discriminator_prediction_on_real_images) + \
+                self.discriminator_loss_op(
+                    labels_op=tf.zeros_like(discriminator_predictions_on_generated_images),
+                    predictions_op=discriminator_predictions_on_generated_images)
+
+        discriminator_gradients = discriminator_tape.gradient(
+            discriminator_loss,
+            self.models_map["collection_b_discriminator"].trainable_variables)
+
+        self.discriminator_optimizer.apply_gradients(
+            zip(discriminator_gradients, self.models_map["collection_b_discriminator"].trainable_variables))
+
+        return {
+            "discriminator_loss": discriminator_loss
+        }

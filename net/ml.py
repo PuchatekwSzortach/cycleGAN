@@ -7,6 +7,7 @@ import collections
 import tensorflow as tf
 
 import net.data
+import net.processing
 
 
 class ReflectionPadding2D(tf.keras.layers.Layer):
@@ -244,8 +245,10 @@ class CycleGANModel(tf.keras.Model):
             "collection_b_discriminator": DiscriminatorBuilder().get_model()
         }
 
-        self.collection_a_image_pool = net.data.ImagePool(max_size=50)
-        self.collection_b_image_pool = net.data.ImagePool(max_size=50)
+        self.image_pools_map = {
+            "collection_a_generated_images_pool": net.processing.ImagePool(max_size=50),
+            "collection_b_generated_images_pool": net.processing.ImagePool(max_size=50)
+        }
 
         self.discriminator_loss_op = self._get_discriminator_loss_op()
 
@@ -256,7 +259,9 @@ class CycleGANModel(tf.keras.Model):
 
     def _get_discriminator_loss_op(self):
 
-        base_loss_op = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        # CycleGAN paper uses mean squared error loss for the discriminator instead of binary cross entropy,
+        # stating the former leads to more stable training
+        base_loss_op = tf.keras.losses.MeanSquaredError()
 
         def loss_op(labels_op, predictions_op):
 
@@ -288,25 +293,29 @@ class CycleGANModel(tf.keras.Model):
         # Define a named tuple for the generator and discriminator data
         TrainingInput = collections.namedtuple(
             "TrainingInput",
-            ["generator", "discriminator", "source_images", "target_images", "optimizer", "loss_name"])
+            [
+                "generator", "discriminator", "source_images", "target_images",
+                "image_pool", "optimizer", "loss_name"])
 
         # Training inputs for training both discriminators
         training_inputs = [
             TrainingInput(
                 generator=self.models_map["collection_a_generator"],
-                discriminator=self.models_map["collection_b_discriminator"],
+                discriminator=self.models_map["collection_a_discriminator"],
                 source_images=collection_a_real_images,
                 target_images=collection_b_real_images,
-                optimizer=self.optimizers_map["collection_b_discriminator"],
-                loss_name="discriminator_b_loss"
+                image_pool=self.image_pools_map["collection_a_generated_images_pool"],
+                optimizer=self.optimizers_map["collection_a_discriminator"],
+                loss_name="discriminator_a_loss"
             ),
             TrainingInput(
                 generator=self.models_map["collection_b_generator"],
-                discriminator=self.models_map["collection_a_discriminator"],
+                discriminator=self.models_map["collection_b_discriminator"],
                 source_images=collection_b_real_images,
                 target_images=collection_a_real_images,
-                optimizer=self.optimizers_map["collection_a_discriminator"],
-                loss_name="discriminator_a_loss"
+                image_pool=self.image_pools_map["collection_b_generated_images_pool"],
+                optimizer=self.optimizers_map["collection_b_discriminator"],
+                loss_name="discriminator_b_loss"
             )
         ]
 
@@ -315,14 +324,18 @@ class CycleGANModel(tf.keras.Model):
 
             with tf.GradientTape() as discriminator_tape:
 
-                generated_images = training_input.generator(
-                    training_input.source_images, training=False)
+                generated_images = training_input.generator(training_input.source_images, training=False)
+
+                generated_images_from_pool = training_input.image_pool.query(
+                    input_images=generated_images,
+                    replace_probability=0.5
+                )
 
                 discriminator_prediction_on_real_images = training_input.discriminator(
                     training_input.target_images, training=True)
 
                 discriminator_predictions_on_generated_images = training_input.discriminator(
-                    generated_images, training=True)
+                    generated_images_from_pool, training=True)
 
                 discriminator_loss = \
                     self.discriminator_loss_op(

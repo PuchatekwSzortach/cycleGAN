@@ -11,7 +11,6 @@ import box
 import cv2
 import imgaug
 import more_itertools
-import numpy as np
 
 import net.processing
 
@@ -154,65 +153,3 @@ class ImagePairsDataLoader:
                 yield \
                     net.processing.ImageProcessor.normalize_batch(first_collection_batch), \
                     net.processing.ImageProcessor.normalize_batch(second_collection_batch)
-
-
-class ImagePool:
-    """
-    Image pool class that stores up to max_size images and on query(images)
-    method returns len(images) images that have 50% chance of coming from images and 50% chance
-    of coming from pool. For any image returned from the pool, it's replaced with new image.
-    """
-
-    def __init__(self, max_size: int):
-        """
-        Constructor
-
-        Args:
-            max_size (int): maximum size of the pool
-        """
-
-        self.max_size = max_size
-        self.images = []
-
-    def query(self, input_images: np.ndarray) -> np.ndarray:
-        """
-        Get len(input_images) images that have 50% chance of coming from input_images and
-        50% chance of coming from pool.
-        If image comes from pool, it's replaced with new image from input_images.
-
-        Args:
-            input_images (np.ndarray): An array of input images.
-
-        Returns:
-            np.ndarray: An array of output images.
-        """
-
-        # Create an empty list to store the output images
-        output_images = []
-
-        # Iterate over each input image
-        for image in input_images:
-
-            # If the image pool is not full,
-            # add the image to the pool and append it to the output images
-            if len(self.images) < self.max_size:
-                self.images.append(image)
-                output_images.append(image)
-            else:
-
-                # If the image pool is full, randomly choose whether to replace an image from the pool or not
-                if random.random() > 0.5:
-
-                    # If chosen to replace,
-                    # randomly select an image from the pool and append it to the output images
-                    random_index = random.randint(0, len(self.images) - 1)
-                    output_images.append(self.images[random_index])
-
-                    # Replace the selected image in the pool with the new image
-                    self.images[random_index] = image
-                else:
-                    # If chosen not to replace, append the new image to the output images
-                    output_images.append(image)
-
-        # Convert the output images list to a numpy array and return it
-        return np.array(output_images)

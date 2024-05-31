@@ -302,8 +302,8 @@ class CycleGANModel(tf.keras.Model):
             TrainingInput(
                 generator=self.models_map["collection_a_generator"],
                 discriminator=self.models_map["collection_a_discriminator"],
-                source_images=collection_a_real_images,
-                target_images=collection_b_real_images,
+                source_images=collection_b_real_images,
+                target_images=collection_a_real_images,
                 image_pool=self.image_pools_map["collection_a_generated_images_pool"],
                 optimizer=self.optimizers_map["collection_a_discriminator"],
                 loss_name="discriminator_a_loss"
@@ -311,8 +311,8 @@ class CycleGANModel(tf.keras.Model):
             TrainingInput(
                 generator=self.models_map["collection_b_generator"],
                 discriminator=self.models_map["collection_b_discriminator"],
-                source_images=collection_b_real_images,
-                target_images=collection_a_real_images,
+                source_images=collection_a_real_images,
+                target_images=collection_b_real_images,
                 image_pool=self.image_pools_map["collection_b_generated_images_pool"],
                 optimizer=self.optimizers_map["collection_b_discriminator"],
                 loss_name="discriminator_b_loss"

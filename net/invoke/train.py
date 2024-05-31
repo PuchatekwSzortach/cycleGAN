@@ -15,11 +15,12 @@ def train_horse2zebra_model(_context, config_path):
         config_path (str): path to configuration file
     """
 
-    import icecream
-    import tqdm
+    import tensorflow as tf
 
     import net.ml
     import net.utilities
+
+    tf.config.run_functions_eagerly(True)
 
     config = net.utilities.read_yaml(config_path)
 
@@ -32,13 +33,22 @@ def train_horse2zebra_model(_context, config_path):
         augmentation_parameters=config.horse2zebra_model.data_augmentation_parameters
     )
 
-    data_iterator = iter(data_loader)
+    training_dataset = tf.data.Dataset.from_generator(
+        generator=lambda: iter(data_loader),
+        output_types=(
+            tf.float32,
+            tf.float32
+        ),
+        output_shapes=(
+            tf.TensorShape([None, None, None, 3]),
+            tf.TensorShape([None, None, None, 3]),
+        )
+    ).prefetch(32)
 
     cycle_gan = net.ml.CycleGANModel()
+    cycle_gan.compile()
 
-    for _ in tqdm.tqdm(range(4)):
-
-        sample = next(data_iterator)
-        losses_map = cycle_gan.train_step(sample)
-
-        icecream.ic(losses_map)
+    cycle_gan.fit(
+        training_dataset,
+        steps_per_epoch=len(data_loader),
+        epochs=2)

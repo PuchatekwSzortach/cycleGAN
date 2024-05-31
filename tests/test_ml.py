@@ -42,6 +42,9 @@ def test_training_cyclegan_model():
 
     import tensorflow as tf
 
+    # Ensure eager execution is enabled
+    tf.config.run_functions_eagerly(True)
+
     image_shape = (256, 256, 3)
 
     # Create a dummy dataset
@@ -50,10 +53,10 @@ def test_training_cyclegan_model():
             np.ones((4, *image_shape), dtype=np.float32),
             np.ones((4, *image_shape), dtype=np.float32)
         )
-    ).batch(2)
+    ).repeat(2).batch(2)
 
     model = net.ml.CycleGANModel()
     model.compile()
 
     # We're not asserting anything here, just checking if the model can be trained without any errors
-    model.fit(dataset, epochs=1, verbose=0)
+    model.fit(dataset, epochs=2, verbose=0)

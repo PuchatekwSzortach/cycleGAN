@@ -53,8 +53,13 @@ class ImagePairsDataLoader:
                 glob.glob(pathname=os.path.join(second_collection_directory, "*.jpg")))
         })
 
-        self.data_map.shortest_collection_length = min(
-            len(self.data_map.first_collection_paths), len(self.data_map.second_collection_paths))
+        # Compute samples count so that we don't go over the shorter collection length and
+        # have full batches
+        self.data_map.samples_count = (
+            min(
+                len(self.data_map.first_collection_paths),
+                len(self.data_map.second_collection_paths)) // self.data_map.batch_size
+        ) * self.data_map.batch_size
 
         self.shuffle = shuffle
 
@@ -99,7 +104,7 @@ class ImagePairsDataLoader:
             int: number of samples dataloader can yield
         """
 
-        return self.data_map.shortest_collection_length // self.data_map.batch_size
+        return self.data_map.samples_count // self.data_map.batch_size
 
     def __iter__(self):
 
@@ -114,13 +119,11 @@ class ImagePairsDataLoader:
                 random.shuffle(first_sample_indices)
                 random.shuffle(second_sample_indices)
 
-            # Truncate indices to the shortest collection length
-            first_sample_indices = first_sample_indices[:self.data_map.shortest_collection_length]
-            second_sample_indices = second_sample_indices[:self.data_map.shortest_collection_length]
-
             for first_indices_batch, second_indices_batch in zip(
-                    more_itertools.chunked(first_sample_indices, self.data_map.batch_size, strict=True),
-                    more_itertools.chunked(second_sample_indices, self.data_map.batch_size, strict=True)):
+                    more_itertools.chunked(
+                        first_sample_indices[:self.data_map.samples_count], self.data_map.batch_size, strict=True),
+                    more_itertools.chunked(
+                        second_sample_indices[:self.data_map.samples_count], self.data_map.batch_size, strict=True)):
 
                 first_collection_batch = []
                 second_collection_batch = []

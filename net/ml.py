@@ -250,24 +250,17 @@ class CycleGANModel(tf.keras.Model):
             "collection_b_generated_images_pool": net.processing.ImagePool(max_size=50)
         }
 
-        self.discriminator_loss_op = self._get_discriminator_loss_op()
+        self.losses_ops_map = {
+            "mean_squared_error": tf.keras.losses.MeanSquaredError(),
+            "mean_absolute_error": tf.keras.losses.MeanAbsoluteError(),
+        }
 
         self.optimizers_map = {
             "collection_a_discriminator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5),
-            "collection_b_discriminator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
+            "collection_b_discriminator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5),
+            "collection_a_generator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5),
+            "collection_b_generator": tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
         }
-
-    def _get_discriminator_loss_op(self):
-
-        # CycleGAN paper uses mean squared error loss for the discriminator instead of binary cross entropy,
-        # stating the former leads to more stable training
-        base_loss_op = tf.keras.losses.MeanSquaredError()
-
-        def loss_op(labels_op, predictions_op):
-
-            return base_loss_op(labels_op, predictions_op)
-
-        return loss_op
 
     def _train_discriminators(self, data: tuple) -> dict:
         """
@@ -338,12 +331,12 @@ class CycleGANModel(tf.keras.Model):
                     generated_images_from_pool, training=True)
 
                 discriminator_loss = \
-                    self.discriminator_loss_op(
-                        labels_op=tf.ones_like(discriminator_prediction_on_real_images),
-                        predictions_op=discriminator_prediction_on_real_images) + \
-                    self.discriminator_loss_op(
-                        labels_op=tf.zeros_like(discriminator_predictions_on_generated_images),
-                        predictions_op=discriminator_predictions_on_generated_images)
+                    self.losses_ops_map["mean_squared_error"](
+                        y_true=tf.ones_like(discriminator_prediction_on_real_images),
+                        y_pred=discriminator_prediction_on_real_images) + \
+                    self.losses_ops_map["mean_squared_error"](
+                        y_true=tf.zeros_like(discriminator_predictions_on_generated_images),
+                        y_pred=discriminator_predictions_on_generated_images)
 
                 losses_map[training_input.loss_name] = discriminator_loss
 
@@ -356,15 +349,110 @@ class CycleGANModel(tf.keras.Model):
 
         return losses_map
 
+    def _train_generators(self, data: tuple) -> dict:
+
+        collection_a_real_images, collection_b_real_images = data
+
+        # Train generators
+        self.models_map["collection_a_discriminator"].trainable = False
+        self.models_map["collection_b_discriminator"].trainable = False
+        self.models_map["collection_a_generator"].trainable = True
+        self.models_map["collection_b_generator"].trainable = True
+
+        losses_map = {}
+        losses_components = {}
+
+        with tf.GradientTape() as generator_a_tape, tf.GradientTape() as generator_b_tape:
+
+            generated_images_map = {
+                "collection_a_generated_images": self.models_map["collection_a_generator"](
+                    collection_b_real_images, training=True),
+                "collection_b_generated_images": self.models_map["collection_b_generator"](
+                    collection_a_real_images, training=True)
+            }
+
+            discriminator_a_predictions_on_generated_images = self.models_map["collection_a_discriminator"](
+                generated_images_map["collection_a_generated_images"], training=False)
+
+            losses_components["discriminator_a_loss"] = self.losses_ops_map["mean_squared_error"](
+                y_true=tf.ones_like(discriminator_a_predictions_on_generated_images),
+                y_pred=discriminator_a_predictions_on_generated_images)
+
+            discriminator_b_predictions_on_generated_images = self.models_map["collection_b_discriminator"](
+                generated_images_map["collection_b_generated_images"], training=False)
+
+            losses_components["discriminator_b_loss"] = self.losses_ops_map["mean_squared_error"](
+                y_true=tf.ones_like(discriminator_b_predictions_on_generated_images),
+                y_pred=discriminator_b_predictions_on_generated_images)
+
+            losses_components["generator_a_identity_loss"] = self.losses_ops_map["mean_absolute_error"](
+                y_true=collection_a_real_images,
+                y_pred=self.models_map["collection_a_generator"](collection_a_real_images, training=True)
+            )
+
+            losses_components["generator_b_identity_loss"] = self.losses_ops_map["mean_absolute_error"](
+                y_true=collection_b_real_images,
+                y_pred=self.models_map["collection_b_generator"](collection_b_real_images, training=True)
+            )
+
+            losses_components["collection_a_cyclic_consistency_loss"] = self.losses_ops_map["mean_absolute_error"](
+                y_true=collection_a_real_images,
+                y_pred=self.models_map["collection_a_generator"](
+                    generated_images_map["collection_b_generated_images"], training=True)
+            )
+
+            losses_components["collection_b_cyclic_consistency_loss"] = self.losses_ops_map["mean_absolute_error"](
+                y_true=collection_b_real_images,
+                y_pred=self.models_map["collection_b_generator"](
+                    generated_images_map["collection_a_generated_images"], training=True)
+            )
+
+            losses_map["generator_a_loss"] = \
+                losses_components["discriminator_a_loss"] + \
+                (10.0 * losses_components["collection_a_cyclic_consistency_loss"]) + \
+                (10.0 * losses_components["collection_b_cyclic_consistency_loss"]) + \
+                (5.0 * losses_components["generator_a_identity_loss"])
+
+            losses_map["generator_b_loss"] = \
+                losses_components["discriminator_b_loss"] + \
+                (10.0 * losses_components["collection_a_cyclic_consistency_loss"]) + \
+                (10.0 * losses_components["collection_b_cyclic_consistency_loss"]) + \
+                (5.0 * losses_components["generator_b_identity_loss"])
+
+        generator_a_gradients = generator_a_tape.gradient(
+            losses_map["generator_a_loss"],
+            self.models_map["collection_a_generator"].trainable_variables)
+
+        self.optimizers_map["collection_a_generator"].apply_gradients(
+            zip(generator_a_gradients, self.models_map["collection_a_generator"].trainable_variables))
+
+        generator_b_gradients = generator_b_tape.gradient(
+            losses_map["generator_b_loss"],
+            self.models_map["collection_b_generator"].trainable_variables)
+
+        self.optimizers_map["collection_b_generator"].apply_gradients(
+            zip(generator_b_gradients, self.models_map["collection_b_generator"].trainable_variables))
+
+        return losses_map
+
     def train_step(self, data):
         """
         Manual train step
         """
 
         discriminator_losses_map = self._train_discriminators(data)
+        generator_losses_map = self._train_generators(data)
 
         losses_map = {
-            **discriminator_losses_map
+            **discriminator_losses_map,
+            **generator_losses_map
         }
+
+        # Disable training for discriminators and generators, so
+        # that validation can be performed without affecting gradients
+        self.models_map["collection_a_discriminator"].trainable = False
+        self.models_map["collection_b_discriminator"].trainable = False
+        self.models_map["collection_a_generator"].trainable = False
+        self.models_map["collection_b_generator"].trainable = False
 
         return losses_map

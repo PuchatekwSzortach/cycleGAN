@@ -33,3 +33,27 @@ def test_cyclegan_discriminator():
 
     # Assert output has 1 channel
     assert actual.shape[-1] == 1
+
+
+def test_training_cyclegan_model():
+    """
+    Test training cyclegan model
+    """
+
+    import tensorflow as tf
+
+    image_shape = (256, 256, 3)
+
+    # Create a dummy dataset
+    dataset = tf.data.Dataset.from_tensor_slices(
+        (
+            np.ones((4, *image_shape), dtype=np.float32),
+            np.ones((4, *image_shape), dtype=np.float32)
+        )
+    ).batch(2)
+
+    model = net.ml.CycleGANModel()
+    model.compile()
+
+    # We're not asserting anything here, just checking if the model can be trained without any errors
+    model.fit(dataset, epochs=1, verbose=0)

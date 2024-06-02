@@ -3,6 +3,7 @@ Module with machine learning related logic
 """
 
 import collections
+import shutil
 
 import tensorflow as tf
 
@@ -456,3 +457,71 @@ class CycleGANModel(tf.keras.Model):
         self.models_map["collection_b_generator"].trainable = False
 
         return losses_map
+
+
+class ModelCheckpoint(tf.keras.callbacks.Callback):
+    """
+    Callback for periodically saving model provided in constructor - so a bit different from keras' ModelCheckpoint
+    """
+
+    def __init__(self, target_model: tf.keras.Model, checkpoint_path: str, saving_interval_in_steps: int):
+        """
+        Constructor
+
+        Args:
+            model (tf.keras.Model): model to save
+            checkpoint_path (str): path to save model at
+            saving_interval_in_steps (int): specifies how often model should be saved
+        """
+
+        super().__init__()
+
+        self.target_model = target_model
+        self.checkpoint_path = checkpoint_path
+        self.saving_interval_in_steps = saving_interval_in_steps
+
+        self.steps_counter = 0
+
+    def on_train_batch_end(self, batch, logs=None):
+        """
+        On train batch end callback, saves model if specified number of steps has passed since last save
+        """
+
+        if self.steps_counter == self.saving_interval_in_steps:
+
+            shutil.rmtree(self.checkpoint_path, ignore_errors=True)
+            self.target_model.save(self.checkpoint_path, save_format="h5")
+
+            self.steps_counter = 0
+
+        else:
+
+            self.steps_counter += 1
+
+
+class GANLearningRateSchedulerCallback(tf.keras.callbacks.Callback):
+    """
+    Learning rate scheduler callback for a GAN model
+    """
+
+    def __init__(
+            self, generator_optimizer, discriminator_opitimizer, base_learning_rate: float,
+            epochs_count: int):
+
+        self.generator_optimizer = generator_optimizer
+        self.discriminator_opitimizer = discriminator_opitimizer
+        self.base_learning_rate = base_learning_rate
+        self.epochs_count = epochs_count
+
+    def on_epoch_end(self, epoch: int, logs=None):
+        """
+        Function to be called at the end of each epoch
+        """
+
+        half_epochs_count = float(self.epochs_count / 2.0)
+
+        learning_rate = self.base_learning_rate * \
+            (1.0 - max(0, epoch + 1.0 - half_epochs_count) / (half_epochs_count + 1.0))
+
+        self.generator_optimizer.learning_rate = learning_rate
+        self.discriminator_opitimizer.learning_rate = learning_rate

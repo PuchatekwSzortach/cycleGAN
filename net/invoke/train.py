@@ -51,4 +51,29 @@ def train_horse2zebra_model(_context, config_path):
     cycle_gan.fit(
         training_dataset,
         steps_per_epoch=len(data_loader),
-        epochs=2)
+        epochs=config.horse2zebra_model.epochs,
+        callbacks=[
+            net.ml.ModelCheckpoint(
+                target_model=cycle_gan.models_map["collection_a_generator"],
+                checkpoint_path=config.horse2zebra_model.collection_a_generator_model_path,
+                saving_interval_in_steps=500
+            ),
+            net.ml.ModelCheckpoint(
+                target_model=cycle_gan.models_map["collection_b_generator"],
+                checkpoint_path=config.horse2zebra_model.collection_b_generator_model_path,
+                saving_interval_in_steps=500
+            ),
+            net.ml.GANLearningRateSchedulerCallback(
+                generator_optimizer=cycle_gan.optimizers_map["collection_a_generator"],
+                discriminator_opitimizer=cycle_gan.optimizers_map["collection_a_discriminator"],
+                base_learning_rate=config.horse2zebra_model.learning_rate,
+                epochs_count=config.horse2zebra_model.epochs
+            ),
+            net.ml.GANLearningRateSchedulerCallback(
+                generator_optimizer=cycle_gan.optimizers_map["collection_b_generator"],
+                discriminator_opitimizer=cycle_gan.optimizers_map["collection_b_discriminator"],
+                base_learning_rate=config.horse2zebra_model.learning_rate,
+                epochs_count=config.horse2zebra_model.epochs
+            )
+        ]
+    )

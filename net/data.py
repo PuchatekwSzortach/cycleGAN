@@ -58,7 +58,8 @@ class ImagePairsDataLoader:
         self.data_map.samples_count = (
             min(
                 len(self.data_map.first_collection_paths),
-                len(self.data_map.second_collection_paths)) // self.data_map.batch_size
+                len(self.data_map.second_collection_paths)
+            ) // self.data_map.batch_size
         ) * self.data_map.batch_size
 
         self.shuffle = shuffle

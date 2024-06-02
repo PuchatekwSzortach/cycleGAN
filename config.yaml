@@ -15,7 +15,12 @@ horse2zebra_dataset:
 horse2zebra_model:
 
   batch_size: 4
+  epochs: 200
   image_shape: [256, 256, 3]
+  learning_rate: 0.0002
+
+  collection_a_generator_model_path: "/data/horse2zebra_collection_a_generator.h5"
+  collection_b_generator_model_path: "/data/horse2zebra_collection_b_generator.h5"
 
   data_augmentation_parameters:
     image_shape: [256, 256, 3]

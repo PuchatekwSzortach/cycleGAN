@@ -15,8 +15,11 @@ def train_horse2zebra_model(_context, config_path):
         config_path (str): path to configuration file
     """
 
+    import os
+
     import tensorflow as tf
 
+    import net.data
     import net.ml
     import net.utilities
 
@@ -24,7 +27,7 @@ def train_horse2zebra_model(_context, config_path):
 
     config = net.utilities.read_yaml(config_path)
 
-    data_loader = net.data.ImagePairsDataLoader(
+    training_data_loader = net.data.ImagePairsDataLoader(
         first_collection_directory=config.horse2zebra_dataset.training_data.first_collection_directory,
         second_collection_directory=config.horse2zebra_dataset.training_data.second_collection_directory,
         batch_size=config.horse2zebra_model.batch_size,
@@ -34,7 +37,28 @@ def train_horse2zebra_model(_context, config_path):
     )
 
     training_dataset = tf.data.Dataset.from_generator(
-        generator=lambda: iter(data_loader),
+        generator=lambda: iter(training_data_loader),
+        output_types=(
+            tf.float32,
+            tf.float32
+        ),
+        output_shapes=(
+            tf.TensorShape([None, None, None, 3]),
+            tf.TensorShape([None, None, None, 3]),
+        )
+    ).prefetch(32)
+
+    validation_data_loader = net.data.ImagePairsDataLoader(
+        first_collection_directory=config.horse2zebra_dataset.validation_data.first_collection_directory,
+        second_collection_directory=config.horse2zebra_dataset.validation_data.second_collection_directory,
+        batch_size=config.horse2zebra_model.batch_size,
+        shuffle=True,
+        target_size=config.horse2zebra_model.image_shape,
+        augmentation_parameters=config.horse2zebra_model.data_augmentation_parameters
+    )
+
+    validation_dataset = tf.data.Dataset.from_generator(
+        generator=lambda: iter(validation_data_loader),
         output_types=(
             tf.float32,
             tf.float32
@@ -50,7 +74,7 @@ def train_horse2zebra_model(_context, config_path):
 
     cycle_gan.fit(
         training_dataset,
-        steps_per_epoch=len(data_loader),
+        steps_per_epoch=len(training_data_loader),
         epochs=config.horse2zebra_model.epochs,
         callbacks=[
             net.ml.ModelCheckpoint(
@@ -74,6 +98,15 @@ def train_horse2zebra_model(_context, config_path):
                 discriminator_opitimizer=cycle_gan.optimizers_map["collection_b_discriminator"],
                 base_learning_rate=config.horse2zebra_model.learning_rate,
                 epochs_count=config.horse2zebra_model.epochs
-            )
+            ),
+            net.ml.VisualizationArchivesBuilderCallback(
+                cycle_gan=cycle_gan,
+                data_iterator=iter(validation_dataset),
+                output_directory=os.path.dirname(config.logging_path),
+                file_name="archive",
+                logging_interval=200,
+                max_archive_size_in_bytes=100 * 1024 * 1024,
+                max_archives_count=10
+            ),
         ]
     )
